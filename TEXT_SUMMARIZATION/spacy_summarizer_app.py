@@ -53,42 +53,47 @@ st.sidebar.markdown(f"**Current Settings:**\n- Max Sentence Length: {max_sent_le
 st.title('Text Summarization App')
 
 # Input method selection
-input_method = st.radio("Choose Input Method:", ["Enter Text", "Upload File", "Paste Test"])
+# Input section
+input_method = st.radio("Choose Input Method:", ["Enter Text", "Upload File", "Paste File"])
 input_text = ""
-
 if input_method == "Enter Text":
-    input_text = st.text_area('Enter text to summarize:', height=200)
-
+    input_text = st.text_area("Enter your text here:", height=200)
 elif input_method == "Upload File":
-    uploaded_file = st.file_uploader("Upload a .txt file", type=["txt", "pdf", "docx"])
+    uploaded_file = st.file_uploader("Upload a .txt, .pdf, or .docx file", type=["txt", "pdf", "docx"])
     if uploaded_file:
-        try:
-            # Try UTF-8 first
+        ext = uploaded_file.name.split(".")[-1].lower()
+        if ext == "txt":
             input_text = uploaded_file.read().decode("utf-8")
-        except UnicodeDecodeError:
-            try:
-                # Fall back to Windows encoding
-                input_text = uploaded_file.read().decode("cp1252")
-            except Exception as e:
-                st.error(f"Cannot decode file: {e}")
-                input_text = ""
+        elif ext == "pdf":
+            import pdfplumber
+            with pdfplumber.open(uploaded_file) as pdf:
+                input_text = "\n".join(page.extract_text() or "" for page in pdf.pages)
+        elif ext == "docx":
+            from docx import Document
+            doc = Document(uploaded_file)
+            input_text = "\n".join(p.text for p in doc.paragraphs)
 
 elif input_method == "Paste Test":
     input_text = st.text_area('Paste your test case here:', height=200)
+    
 
 # ------------------------
 # Summarize Button
 # ------------------------
-if st.button('Summarize'):
+if st.button("Generate Summary"):
     if input_text.strip():
-        summary, orig_len, summ_len, ratio_actual = summarize_text(input_text, max_sent_len, min_ratio)
-        st.subheader('Summary:')
-        st.write(summary)
+        # Truncation-based summary
+        summary_trunc, orig_len, summ_len, ratio_actual = summarize_text(input_text, max_sent_len, min_ratio)
+        st.subheader("📄 Original Text")
+        st.write(input_text)
+        st.subheader("✂️ Truncation-based Summary")
+        st.success(summary_trunc)
         st.info(f"Summary length: {summ_len} words | Original: {orig_len} words | Ratio: {ratio_actual:.2f}")
 
         if summ_len > 0 and ratio_actual < min_ratio:
             st.warning(f"Summary is shorter than the minimum ratio ({min_ratio}).")
-        if any(len(sent.split()) > max_sent_len for sent in summary.split('.')):
+        if any(len(sent.split()) > max_sent_len for sent in summary_trunc.split('.')):
             st.warning(f"Some summary sentences exceed the maximum sentence length of {max_sent_len} words.")
+
     else:
-        st.warning('Please enter some text or upload a file.')
+        st.warning("Please provide text or upload a file first.")
